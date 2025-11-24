@@ -1,0 +1,239 @@
+---
+title: "Population growth rates from Living Planet Database"
+format: html
+---
+
+## Set up
+
+```{r, message=FALSE, results='hide'}
+# load libraries
+library(tidyverse)
+library(colorspace)
+library(sf)
+```
+
+Load the output from `calculate_growth_rates.R`. This is a data frame with the average, minimum, maximum, and standard deviation of the annual growth rates for 2567 populations. These are the 600 species for which there was data in the Living Planet Database that were included in the threat maps.
+
+```{r}
+# note: ../ backs up by one directory
+df = readRDS("../outputs/lpd_fw_growthrates.rds")
+```
+
+
+## Distribution of the growth rate values
+
+```{r, echo = FALSE}
+
+# custom function to plot histograms
+
+hist_plot = function(dat = df, varname, varlabel){
+  
+  # get limits for the plot axes and fill color
+  subdf = select(dat, c({{varname}}))
+  limit = max(c(abs(min(subdf[,1], na.rm =T)), max(subdf[,1], na.rm = T)))
+  
+  # histogram
+  p = ggplot(data = dat) +
+    geom_histogram(aes(x ={{varname}}, 
+                       fill = after_stat(x)), 
+                   bins = 25, 
+                   linewidth = .1, 
+                   col = "grey10") +
+    facet_wrap(~Class, scales = "free_y") +
+    xlim(c(-limit, limit)) +
+    labs(x = varlabel, 
+         y = "Number of populations",
+         fill = "Growth rate") +
+    scale_y_sqrt() +
+    colorspace::scale_fill_continuous_divergingx(palette = "Zissou 1", 
+                                                 limits = c(-limit, limit),
+                                                 rev = TRUE) +
+    hrbrthemes::theme_ipsum_rc() +
+    theme(legend.position = "bottom")
+  
+  return(p)
+  
+}
+```
+
+```{r}
+hist_plot(dat = df, mean, "Average growth rate")
+hist_plot(dat = df, median, "Median growth rate")
+hist_plot(dat = df, min, "Minimum growth rate")
+hist_plot(dat = df, max, "Maximum growth rate")
+hist_plot(dat = df, sd, "Growth rate SD")
+```
+
+
+## Map of the growth rates
+
+Get a world map as the base map, and then make a spatial points layer (`sf`) from the growth rate data frame:
+
+```{r}
+# get base map
+world.map = geodata::world() |> st_as_sf()
+
+# make points layer
+pop.pts = sf::st_as_sf(df, 
+                       coords = c("Longitude", "Latitude"),
+                       crs = "epsg:4326")
+```
+
+Note: These populations are already filtered to only include those with specific coordinates in the Living Planet Database.
+
+```{r, echo = FALSE}
+
+# custom function to map the points
+
+map_plot = function(dat = pop.pts, varname, varlabel){
+  
+  # get limits for the plot axes and fill color
+  subdf = select(dat, c({{varname}})) |> sf::st_drop_geometry()
+  limit = max(c(abs(min(subdf[,1], na.rm = T)), max(subdf[,1], na.rm = T)))
+
+  # map
+  p = ggplot() +
+    geom_sf(data = world.map, col = "grey90", fill = "grey90") +
+    geom_sf(data = dat,
+          aes(fill = {{varname}}), 
+          pch = 21, linewidth = .01, size = 3, alpha = 1) +
+    colorspace::scale_fill_continuous_divergingx(palette = "Zissou 1", 
+                                                 limits = c(-limit, limit),
+                                                 rev = TRUE) +
+    theme_void() +
+    labs(fill = varlabel) +
+    theme(legend.position = "right")
+  
+  return(p)
+  
+}
+```
+
+```{r}
+map_plot(dat = pop.pts, mean, "Average\ngrowth rate") 
+map_plot(dat = pop.pts, median, "Median\ngrowth rate") 
+map_plot(dat = pop.pts, min, "Minimum\ngrowth rate") 
+map_plot(dat = pop.pts, max, "Maximum\ngrowth rate") 
+map_plot(dat = pop.pts, sd, "Growth rate SD") 
+```
+
+You can unclick the layers shown here, mean or median may be the most interesting for now!
+```{r, warning=FALSE, message=FALSE}
+mapview::mapview(pop.pts, zcol = c("mean", 
+                                   "median",
+                                   "max"), 
+                 alpha.regions = 1,
+                 col.regions = hcl.colors(6, palette = "Zissou 1", rev = TRUE),
+                 at = c(seq(-4, 0, length.out = 4), 1, 2, 3, 4))
+```
+
+
+Mapping just the declines, to see them more clearly:
+
+```{r, warning=FALSE, message=FALSE}
+mapview::mapview(filter(pop.pts, mean < 0 ), 
+                 zcol = c(c("mean", "median")), 
+                 alpha.regions = 1,
+                                  col.regions = hcl.colors(6, palette = "Heat 2"))
+```
+
+
+## Relationship with duration of the time series
+
+There is always more variability in the average growth rate when time series are shorter (the average tends to "flatten" variability in the longer ones):
+
+```{r}
+ggplot(data = pop.pts) +
+  geom_point(aes(x = duration, y = mean, col = mean)) +
+  colorspace::scale_color_continuous_divergingx(palette = "Zissou 1", 
+                                                limits = c(-2.1,2.1),
+                                                rev = TRUE) +
+  hrbrthemes::theme_ipsum_rc() +
+  labs(x = "Total time series length (years)",
+       y = "Average growth rate")
+```
+
+```{r}
+ggplot(data = pop.pts) +
+  geom_point(aes(x = duration, y = median, col = median)) +
+  colorspace::scale_color_continuous_divergingx(palette = "Zissou 1", 
+                                                limits = c(-2.1,2.1),
+                                                rev = TRUE) + 
+  hrbrthemes::theme_ipsum_rc() +
+  labs(x = "Total time series length (years)",
+       y = "Median growth rate") 
+```
+
+Plot of the variance (standard deviation) in the time series:
+
+```{r}
+ggplot(data = pop.pts) +
+  geom_point(aes(x = duration, y = sd, col = sd)) +
+  colorspace::scale_color_continuous_divergingx(palette = "Roma") + 
+  hrbrthemes::theme_ipsum_rc() +
+  labs(x = "Time series length (years)",
+       y = "Median growth rate") 
+```
+
+
+Most time series in this data have annual data points, though a few are missing some years. But there doesn't seem to be any relationship with the median (or mean, if you change the variable below - looks similar) growth rate:
+
+```{r}
+ggplot(data = pop.pts) +
+    geom_point(aes(x = n_datapoints, 
+                   y = duration, 
+                   col = median), alpha = .5) +
+  colorspace::scale_color_continuous_divergingx(palette = "Zissou 1", 
+                                                limits = c(-2.1,2.1),
+                                                rev = TRUE) + 
+  hrbrthemes::theme_ipsum_rc() +
+  labs(x = "Number of data points",
+       y = "Time series length (years)") 
+```
+
+
+## When is the data from?
+
+All data together (each line is a time series):
+
+```{r}
+pop.pts.year = pop.pts 
+pop.pts.year$ID = factor(pop.pts.year$ID,
+                         levels = c(pop.pts.year$ID[order(pop.pts.year$min_year)]))
+ggplot() +
+  geom_segment(data = pop.pts.year,
+               aes(y = ID, 
+                   yend = ID, 
+                   x = min_year, 
+                   xend = max_year,
+                   col = mean), alpha = .2) +
+  colorspace::scale_color_continuous_divergingx(palette = "Zissou 1",
+                                                limits = c(-2.1,2.1),
+                                                rev = TRUE) + 
+  labs(x = "Year",
+       y = "Populations") +
+  ggpubr::theme_pubr() +
+  theme(axis.text.y = element_blank(),
+        legend.position = "right",
+        panel.grid.major.x = element_line()) 
+```
+
+Just the negative trends now, to see them more easily:
+```{r, fig.height = 20}
+ggplot() +
+    geom_segment(data = filter(pop.pts.year, median < -0.01),
+               aes(y = ID, 
+                   yend = ID, 
+                   x = min_year, 
+                   xend = max_year,
+                   col = median), alpha = 1) +
+  colorspace::scale_color_continuous_sequential(palette = "Heat 2", rev = F) + 
+  labs(x = "Year",
+       y = "Populations",
+       fill = "Median growth rate") +
+  ggpubr::theme_pubr() +
+  theme(axis.text.y = element_blank(),
+        legend.position = "right",
+        panel.grid.major.x = element_line()) 
+```
+
