@@ -72,8 +72,13 @@ gr_pop = gr_l |>
     "median" = median(lambda, na.rm = T),
     "min" = min(lambda, na.rm = T),
     "max" = max(lambda, na.rm = T),
-    "sd" = sd(lambda, na.rm = T)
+    "sd" = sd(lambda, na.rm = T),
+    "sum" = sum(lambda, na.rm = T)
   )
+
+## how many populations had 6 or more data points?
+which(gr_pop$n_datapoints >= 6) |> length()
+which(gr_pop$n_datapoints < 6) |> length()
 
 ## append the species names to this table
 
@@ -84,5 +89,6 @@ lpd_subset = lpd[index,] |>
 # join!
 df = left_join(lpd_subset, gr_pop, by = c("ID" = "population_id"))
 df = left_join(df, gr2, by = "ID")
+
 saveRDS(df, "outputs/lpd_fw_growthrates.rds")
 write.csv(df, "outputs/lpd_fw_growthrates.csv", row.names = FALSE)
