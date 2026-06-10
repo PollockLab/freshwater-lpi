@@ -5,6 +5,7 @@ library(readr)
 library(sf)
 library(ggplot2)
 library(lme4)
+library(nlme)
 library(viridis)
 sf_use_s2(F)
 
@@ -43,7 +44,7 @@ dat<-dat[complete.cases(dat$mean_div_sd),]
 # model the mean with std error
 m2 <- lme(scale(mean_div_sd, center = TRUE) ~  Cumulative_Impact
           , random = ~ 1 | Class,
-          weights =varFixed(~Cumulative_Impact),
+          weights = varFixed(~Cumulative_Impact),
           method = "ML",
           data = dat)
 
